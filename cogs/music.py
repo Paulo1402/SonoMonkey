@@ -48,6 +48,7 @@ class Music(commands.Cog):
     # Disparado ao acabar uma música
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
+        print('track end')
         if self.loop_flag:
             await self.vc.play(track)
         else:
@@ -67,6 +68,7 @@ class Music(commands.Cog):
 
             self.bot.add_view(self.display_view, message_id=display_message.id)
             self.bot.add_view(self.queue_view, message_id=queue_message.id)
+
             self.ready = True
 
     # Disparado ao enviar uma mensagem em um canal de texto
@@ -77,6 +79,8 @@ class Music(commands.Cog):
         # Verifica checks
         if any(check):
             return
+
+        print(message.content)
 
         # Verifica se o conteúdo enviado é um link
         if is_url(message.content):
@@ -146,7 +150,8 @@ class Music(commands.Cog):
 
     async def play(self, ctx: commands.Context, search: str):
         if not await self.join(ctx.author):
-            await ctx.reply('Entre na call primeiro, corno! :monkey_face::raised_back_of_hand:', ephemeral=True)
+            await ctx.reply('Entre na call primeiro, corno! :monkey_face::raised_back_of_hand:', ephemeral=True,
+                            delete_after=5)
         else:
             decode = spotify.decode_url(search)
             playlist_duration = 0
@@ -164,7 +169,7 @@ class Music(commands.Cog):
                     # Verifica se ainda há um processo em andamento
                     if self.spotify_loop and not self.spotify_loop.done():
                         await ctx.reply('Ainda estou processando a última playlist enviada! '
-                                        'Tente novamente em alguns segundos!', ephemeral=True)
+                                        'Tente novamente em alguns segundos!', ephemeral=True, delete_after=5)
                         return
 
                     # Faz o loop pela playlist do spotify em segundo plano
@@ -172,7 +177,7 @@ class Music(commands.Cog):
                     playlist = True
 
                     await ctx.reply('Playlist adicionada a fila! \n'
-                                    f'Tempo para execução: `{waiting_time}`', ephemeral=True)
+                                    f'Tempo para execução: `{waiting_time}`', ephemeral=True, delete_after=5)
                     # Se for uma música
                 else:
                     print('Spotify Song')
@@ -181,7 +186,7 @@ class Music(commands.Cog):
                     await self.vc.queue.put_wait(track)
 
                     await ctx.reply(f'{track.title} adicionado a fila! \n'
-                                    f'Tempo para execução: `{waiting_time}`', ephemeral=True)
+                                    f'Tempo para execução: `{waiting_time}`', ephemeral=True, delete_after=5)
                     self.queue_duration += track.duration
             # Se retornar None é YT
             else:
@@ -194,7 +199,7 @@ class Music(commands.Cog):
                         playlist_duration += track.duration
 
                     await ctx.reply(f'{tracks.name} adicionado a fila! \n'
-                                    f'Tempo para execução: `{waiting_time}`', ephemeral=True)
+                                    f'Tempo para execução: `{waiting_time}`', ephemeral=True, delete_after=5)
                     self.queue_duration += playlist_duration
                 else:
                     print('YouTube Song')
@@ -202,10 +207,11 @@ class Music(commands.Cog):
                     await self.vc.queue.put_wait(track)
 
                     await ctx.reply(f'{track.title} adicionado a fila! \n'
-                                    f'Tempo para execução: `{waiting_time}`', ephemeral=True)
+                                    f'Tempo para execução: `{waiting_time}`', ephemeral=True, delete_after=5)
                     self.queue_duration += track.duration
-
+            print(self.vc.is_playing(), self.vc.is_paused())
             if not self.vc.is_playing() and not self.vc.is_paused():
+                print('play_song')
                 await self.play_song()
             elif not playlist:
                 await self.queue_view.refresh()
@@ -234,30 +240,32 @@ class Music(commands.Cog):
     async def pause(self, interaction: discord.Interaction):
         if not self.vc.is_paused():
             await self.vc.pause()
-            await interaction.response.send_message('Pediu pra parar parou!', ephemeral=True)
+            await interaction.response.send_message('Pediu pra parar parou!', ephemeral=True, delete_after=5)
         else:
-            await interaction.response.send_message('Já estou pausado!', ephemeral=True)
+            await interaction.response.send_message('Já estou pausado!', ephemeral=True, delete_after=5)
 
     async def resume(self, interaction: discord.Interaction):
         if self.vc.is_paused():
             await self.vc.resume()
-            await interaction.response.send_message('Pediu pra voltar voltou!', ephemeral=True)
+            await interaction.response.send_message('Pediu pra voltar voltou!', ephemeral=True, delete_after=5)
         else:
-            await interaction.response.send_message('Não estou pausado!', ephemeral=True)
+            await interaction.response.send_message('Não estou pausado!', ephemeral=True, delete_after=5)
 
     async def skip(self, interaction: discord.Interaction):
         await self.vc.stop()
         await self.vc.resume()
-        await interaction.response.send_message('Música skipada!', ephemeral=True)
+        await interaction.response.send_message('Música skipada!', ephemeral=True, delete_after=5)
 
     async def previous(self, interaction: discord.Interaction):
+        print(self.vc.queue.history)
         track = self.vc.queue.history[0]
+        print(track)
 
         if track:
             await self.vc.play(track)
-            await interaction.response.send_message('Música anterior selecionada!', ephemeral=True)
+            await interaction.response.send_message('Música anterior selecionada!', ephemeral=True, delete_after=5)
         else:
-            await interaction.response.send_message('Não há nenhuma música anterior!', ephemeral=True)
+            await interaction.response.send_message('Não há nenhuma música anterior!', ephemeral=True, delete_after=5)
 
     async def stop(self, interaction: discord.Interaction, leave: bool):
         self.vc.queue.clear()
@@ -271,17 +279,17 @@ class Music(commands.Cog):
             await self.vc.disconnect()
             self.vc = None
 
-            await interaction.response.send_message('Saindo!', ephemeral=True)
+            await interaction.response.send_message('Saindo!', ephemeral=True, delete_after=5)
         else:
-            await interaction.response.send_message('Parado!', ephemeral=True)
+            await interaction.response.send_message('Parado!', ephemeral=True, delete_after=5)
 
     async def loop(self, interaction: discord.Interaction):
         if self.loop_flag:
             self.loop_flag = False
-            await interaction.response.send_message('Loop desativado!', ephemeral=True)
+            await interaction.response.send_message('Loop desativado!', ephemeral=True, delete_after=5)
         else:
             self.loop_flag = True
-            await interaction.response.send_message('Música atual em loop!', ephemeral=True)
+            await interaction.response.send_message('Música atual em loop!', ephemeral=True, delete_after=5)
 
     async def shuffle(self, interaction: discord.Interaction):
         temp_queue = [track for track in self.vc.queue]
@@ -293,7 +301,7 @@ class Music(commands.Cog):
             await self.vc.queue.put_wait(track)
 
         await self.queue_view.refresh()
-        await interaction.response.send_message('Fila embaralhada!', ephemeral=True)
+        await interaction.response.send_message('Fila embaralhada!', ephemeral=True, delete_after=5)
 
     # Retorna tempo de fila
     def get_waiting_time(self):
@@ -346,16 +354,16 @@ class Music(commands.Cog):
         try:
             track = self.vc.queue[index]
         except IndexError:
-            await interaction.response.send_message('Índice atual não existe!', ephemeral=True)
+            await interaction.response.send_message('Índice atual não existe!', ephemeral=True, delete_after=5)
         else:
             if index > self.vc.queue.count:
-                await interaction.response.send_message('Novo índice não existe!', ephemeral=True)
+                await interaction.response.send_message('Novo índice não existe!', ephemeral=True, delete_after=5)
             else:
                 del self.vc.queue[index]
 
                 self.vc.queue.put_at_index(new_index, track)
                 await interaction.response.send_message(f'{track.title} mudado para a posição {new_index + 1} na fila!',
-                                                        ephemeral=True)
+                                                        ephemeral=True, delete_after=5)
 
 
 # noinspection PyTypeChecker
@@ -369,11 +377,6 @@ class QueueView(discord.ui.View):
         self.page = 0
         self.max_page = 0
 
-        # self.previous_button: discord.Button = self.children[0]
-        # self.next_button: discord.Button = self.children[1]
-        #
-        # self.previous_button.disabled = True
-        # self.next_button.disabled = True
         self.previous.disabled = True
         self.next.disabled = True
 
@@ -523,7 +526,7 @@ class DisplayView(discord.ui.View):
         await self.message.edit(content=None, embed=embed, view=self, attachments=[file])
 
 
-# class SeekView(discord.ui.View, QueueView):
+# class SeekView(QueueView):
 #     def __init__(self):
 #         super().__init__()
 #
