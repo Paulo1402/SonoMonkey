@@ -80,8 +80,6 @@ class Music(commands.Cog):
         if any(check):
             return
 
-        print(message.content)
-
         # Verifica se o conteúdo enviado é um link
         if is_url(message.content):
             ctx = await self.bot.get_context(message)
@@ -175,7 +173,7 @@ class Music(commands.Cog):
                     # Faz o loop pela playlist do spotify em segundo plano
                     self.spotify_loop = self.bot.loop.create_task(self.spotify_lookup(search, decode))
                     playlist = True
-
+                    print(0)
                     await ctx.reply('Playlist adicionada a fila! \n'
                                     f'Tempo para execução: `{waiting_time}`', ephemeral=True, delete_after=5)
                     # Se for uma música
@@ -268,12 +266,13 @@ class Music(commands.Cog):
             await interaction.response.send_message('Não há nenhuma música anterior!', ephemeral=True, delete_after=5)
 
     async def stop(self, interaction: discord.Interaction, leave: bool):
-        self.vc.queue.clear()
+        if self.spotify_loop and not self.spotify_loop.done():
+            self.spotify_loop.cancel()
+
         self.queue_duration = 0
+        self.vc.queue.clear()
 
         await self.vc.stop()
-        await self.display_view.reset()
-        await self.queue_view.reset()
 
         if leave:
             await self.vc.disconnect()
@@ -282,6 +281,9 @@ class Music(commands.Cog):
             await interaction.response.send_message('Saindo!', ephemeral=True, delete_after=5)
         else:
             await interaction.response.send_message('Parado!', ephemeral=True, delete_after=5)
+
+        await self.display_view.reset()
+        await self.queue_view.reset()
 
     async def loop(self, interaction: discord.Interaction):
         if self.loop_flag:
