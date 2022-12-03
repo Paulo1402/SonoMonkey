@@ -103,7 +103,7 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState,
                                     after: discord.VoiceState):
-        if self.vc and len(self.vc.channel.members == 1) or \
+        if self.vc and len(self.vc.channel.members) == 1 or \
                 (member.display_name == self.bot.user.name and not after.channel):
             await self.leave(True)
 
@@ -180,10 +180,7 @@ class Music(commands.Cog):
     async def join(self, user: discord.Member):
         if not self.vc and user.voice:
             self.vc = await user.voice.channel.connect(cls=wavelink.Player)
-
-            # Cria a instancia da fila
             self.queue = Queue()
-            self.queue_view.queue = self.queue
         elif self.vc and self.vc.channel != user.voice.channel:
             await self.vc.move_to(user.voice.channel)
 
@@ -246,15 +243,17 @@ class Music(commands.Cog):
         if decode:
             async for track in spotify.SpotifyTrack.iterator(query=search, type=decode['type']):
                 track.requester = requester
+
                 await self.queue.put_wait(track)
+                await self.queue_view.refresh()
         else:
             tracks = await wavelink.YouTubePlaylist.search(query=search)
 
             for track in tracks.tracks:
                 track.requester = requester
-                await self.queue.put_wait(track)
 
-        await self.queue_view.refresh()
+                await self.queue.put_wait(track)
+                await self.queue_view.refresh()
 
     # Desconecta o bot
     async def leave(self, leave: bool = True):
@@ -512,7 +511,7 @@ class QueueView(discord.ui.View):
         if interaction.user in self.music_cog.vc.channel.members:
             return True
 
-        interaction.response.send_message('Entre no canal primeiro!', delete_after=5)
+        await interaction.response.send_message('Entre no canal primeiro!', delete_after=5)
 
     @classmethod
     async def create_view(cls, message, music_cog):
@@ -596,7 +595,7 @@ class DisplayView(discord.ui.View):
         if interaction.user in self.music_cog.vc.channel.members:
             return True
 
-        interaction.response.send_message('Entre no canal primeiro!', delete_after=5)
+        await interaction.response.send_message('Entre no canal primeiro!', delete_after=5)
 
     @classmethod
     async def create_view(cls, message, music_cog):
