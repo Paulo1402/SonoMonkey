@@ -165,6 +165,7 @@ cython_debug/
 # Local Folders
 ffmpeg/
 lavalink/
+logs/*
 
 # Local files
 temp.py
