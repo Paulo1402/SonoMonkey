@@ -24,6 +24,9 @@ def is_url(url):
 
 
 def create_logger(filename: str):
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+
     root = os.path.join(ROOT, 'logs')
     logs = os.listdir(root)
 
