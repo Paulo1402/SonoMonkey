@@ -77,18 +77,11 @@ class Music(commands.Cog):
         self.bot.add_view(self.display_view, message_id=display_message.id)
         self.bot.add_view(self.queue_view, message_id=queue_message.id)
 
-        self.ready = True
-
     # Disparado ao enviar uma mensagem em um canal de texto
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # if message.interaction:
-        #     return
-
-        check = [not self.ready, message.channel.id != MUSIC_CHANNEL_ID, message.author.id == self.bot.user.id]
-
-        # Verifica checks
-        if any(check):
+        # Retorna caso a mensagem seja disparada pelo bot ou em outro canal de texto
+        if message.channel.id != MUSIC_CHANNEL_ID or message.author.id == self.bot.user.id:
             return
 
         # Verifica se o conteúdo enviado é um link
@@ -103,8 +96,11 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState,
                                     after: discord.VoiceState):
-        if self.vc and len(self.vc.channel.members) == 1 or \
-                (member.display_name == self.bot.user.name and not after.channel):
+        if not self.vc or (self.vc and not self.vc.is_connected()):
+            return
+
+        # Caso todos saiam do canal ou o bot seja desconectado manualmente interrompe o loop
+        if len(self.vc.channel.members) == 1 or (member.display_name == self.bot.user.name and not after.channel):
             await self.leave(True)
 
     # Prepara views dinâmicos e retorna as mensagens usadas como container
@@ -239,7 +235,7 @@ class Music(commands.Cog):
             await self.play_song()
 
     # Faz a pesquisa de playlists
-    async def playlist_lookup(self, search, requester, decode=None):
+    async def playlist_lookup(self, search: str, requester: str, decode: dict | None = None):
         if decode:
             async for track in spotify.SpotifyTrack.iterator(query=search, type=decode['type']):
                 track.requester = requester
@@ -254,25 +250,6 @@ class Music(commands.Cog):
 
                 await self.queue.put_wait(track)
                 await self.queue_view.refresh()
-
-    # Desconecta o bot
-    async def leave(self, leave: bool = True):
-        print('leave')
-        if self.playlist_loop and not self.playlist_loop.done():
-            self.playlist_loop.cancel()
-
-        if self.queue:
-            self.queue.clear()
-
-        if leave and self.vc.is_connected():
-            await self.vc.disconnect()
-
-        await self.display_view.reset()
-        await self.queue_view.reset()
-
-        self.vc = None
-        self.queue = None
-        self.playlist_loop = None
 
     async def play_song(self, track: wavelink.YouTubeTrack = None):
         if not track:
@@ -315,8 +292,30 @@ class Music(commands.Cog):
 
     async def stop(self, interaction: discord.Interaction, leave: bool):
         message = 'Saindo!' if leave else 'Parado!'
+
         await interaction.response.send_message(message, ephemeral=True, delete_after=5)
         await self.leave(leave)
+
+    # Reseta o bot e variáveis
+    async def leave(self, leave: bool = True):
+        if self.playlist_loop and not self.playlist_loop.done():
+            self.playlist_loop.cancel()
+
+        if self.queue:
+            self.queue.clear()
+
+        if self.vc.is_playing():
+            await self.vc.stop()
+
+        if leave and self.vc.is_connected():
+            await self.vc.disconnect()
+
+        await self.display_view.reset()
+        await self.queue_view.reset()
+
+        self.vc = None
+        self.playlist_loop = None
+        self.queue = None
 
     async def loop(self, interaction: discord.Interaction):
         status = 'Pausado' if self.vc.is_paused() else 'Tocando'
@@ -324,10 +323,12 @@ class Music(commands.Cog):
 
         if self.loop_flag:
             self.loop_flag = False
+
             embed.set_footer(text=status)
             message = 'Loop desativado!'
         else:
             self.loop_flag = True
+
             embed.set_footer(text=f'{status} | Loop ativado')
             message = 'Música atual em loop!'
 
@@ -423,37 +424,6 @@ class Music(commands.Cog):
             interaction.response.send_message('Não há nenhum arquivo de log no sistema', delete_after=5)
             return
 
-        # root = os.path.join(ROOT, 'logs')
-        # select = discord.ui.Select(placeholder='Selecione a data de referência')
-        #
-        # for file in os.listdir(root):
-        #     select.add_option(label=file)
-        #
-        # if len(select.options) == 0:
-        #     interaction.response.send_message('Não há nenhum arquivo de log no sistema', delete_after=5)
-        #     return
-        #
-        # async def callback(interaction: discord.Interaction):
-        #     selection = select.values[0]
-        #     fullname = os.path.join(root, selection)
-        #
-        #     with open(fullname, 'r') as f:
-        #         content = f.read()
-        #
-        #     if not content:
-        #         content = 'Não há logs nesse arquivo.'
-        #
-        #     content = f'```{content}```'
-        #
-        #     print(await interaction.original_response())
-        #
-        #     await interaction.response.send_message(content, delete_after=120)
-        #
-        # select.callback = callback
-        #
-        # view = discord.ui.View()
-        # view.add_item(select)
-
         view = HistoryView(options)
         await interaction.response.send_message(view=view, delete_after=300)
 
@@ -463,20 +433,15 @@ class HistoryView(discord.ui.View):
         super().__init__(timeout=300)
 
         self.root = os.path.join(ROOT, 'logs')
-        self.response: discord.InteractionMessage = None
 
         for option in options:
             self.select_history.add_option(label=option)
 
-    async def on_timeout(self):
-        if self.response:
-            await self.response.delete()
-
-    # REVISAR
     @discord.ui.select(cls=discord.ui.Select, placeholder='Selecione a data de referência')
     async def select_history(self, interaction: discord.Interaction, select: discord.ui.Select):
         selection = select.values[0]
         fullname = os.path.join(self.root, selection)
+        select.placeholder = selection
 
         with open(fullname, 'r') as f:
             content = f.read()
@@ -484,14 +449,8 @@ class HistoryView(discord.ui.View):
         if not content:
             content = 'Não há logs nesse arquivo.'
 
-        content = f'```{content}```'
-
-        if self.response:
-            await interaction.response.defer()
-            await self.response.edit(content=content)
-        else:
-            await interaction.response.send_message(content)
-            self.response = await interaction.original_response()
+        content = f'```\n{content}```'
+        await interaction.response.edit_message(content=content, view=self)
 
 
 # noinspection PyTypeChecker
@@ -504,6 +463,7 @@ class QueueView(discord.ui.View):
 
         self.page = 0
         self.max_page = 0
+
         self.previous.disabled = True
         self.next.disabled = True
 
