@@ -1,6 +1,5 @@
 import discord
 import typing
-from discord import app_commands
 from discord.ext import commands
 
 
@@ -8,9 +7,10 @@ class Adm(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name='ping', description='testing...')
-    async def ping(self, interaction: discord.Interaction):
-        await interaction.response.send_message('pong!', delete_after=5)
+    @commands.command(name='ping')
+    @commands.is_owner()
+    async def ping(self, ctx: commands.Context):
+        await ctx.reply('pong!')
 
     @commands.command(name='sync')
     @commands.is_owner()
@@ -49,6 +49,7 @@ class Adm(commands.Cog):
                 pass
             else:
                 count += 1
+
         await ctx.send(f"Synced the tree to {count}/{len(guilds)}.")
 
 

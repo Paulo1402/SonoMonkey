@@ -1,32 +1,24 @@
-import logging
-import wavelink
 import discord
+import wavelink
+import logging
 import os
 import asyncio
 import random
 import json
-import datetime
-from utils.functions import *
+from datetime import datetime
+from utils.utils import *
 from math import floor
-from asyncio import Task
 from wavelink.ext import spotify
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 
 
 MUSIC_CHANNEL_ID = 999002277186637854
 
-tz = datetime.timezone(datetime.timedelta(hours=-3))
-task_time = datetime.time(hour=00, minute=00, tzinfo=tz)
 
-
-# noinspection PyTypeChecker
 class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-        filename = datetime.datetime.now().strftime('%d-%m')
-        self.logger: logging.Logger = create_logger(filename)
 
         self.ready = False
         self.loop_flag = False
@@ -35,10 +27,12 @@ class Music(commands.Cog):
         self.queue_view: QueueView = None
 
         self.vc: wavelink.Player = None
-        self.queue: Queue = None
-        self.playlist_loop: Task = None
+        self.playlist_loop: asyncio.Task = None
 
-        self._create_logger.start()
+        self.queue = Queue()
+        self.logger = Logger()
+
+        # self._create_logger.start()
         bot.loop.create_task(self.connect_nodes())
 
     # Verifica se o comando foi executado corretamente
@@ -90,18 +84,19 @@ class Music(commands.Cog):
             await self.play(ctx, message.content)
 
         # Deleta toda e qualquer mensagem após isso
-        await message.delete(delay=10)
+        await message.delete(delay=5)
 
     # Disparado ao ter uma alteração em algum canal de voz
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState,
                                     after: discord.VoiceState):
+        # Retorna caso o bot não esteja conectado
         if not self.vc or (self.vc and not self.vc.is_connected()):
             return
 
         # Caso todos saiam do canal ou o bot seja desconectado manualmente interrompe o loop
         if len(self.vc.channel.members) == 1 or (member.display_name == self.bot.user.name and not after.channel):
-            await self.leave(True)
+            await self.reset(leave=True)
 
     # Prepara views dinâmicos e retorna as mensagens usadas como container
     async def setup_views(self):
@@ -158,12 +153,6 @@ class Music(commands.Cog):
         await wavelink.NodePool.create_node(bot=self.bot, host=host, port=443, password=password, https=True,
                                             identifier='main', spotify_client=spotify_client)
 
-    # Cria um novo arquivo de log
-    @tasks.loop(time=task_time)
-    async def _create_logger(self):
-        filename = datetime.datetime.now().strftime('%d-%m')
-        self.logger = create_logger(filename)
-
     # Verifica se o bot está conectado
     async def bot_is_ready(self, ctx: commands.Context):
         if self.vc and self.vc.is_connected():
@@ -174,14 +163,18 @@ class Music(commands.Cog):
 
     # Entra no canal do usuário caso esteja em um
     async def join(self, user: discord.Member):
-        if not self.vc and user.voice:
-            self.vc = await user.voice.channel.connect(cls=wavelink.Player)
-            self.queue = Queue()
-        elif self.vc and self.vc.channel != user.voice.channel:
-            await self.vc.move_to(user.voice.channel)
+        if not user.voice:
+            return
+
+        channel = user.voice.channel
+
+        try:
+            self.vc = await channel.connect(cls=wavelink.Player)
+        except discord.ClientException:
+            await self.vc.move_to(channel)
 
         # Verifica se o bot conseguiu se conectar ao canal
-        if self.vc:
+        if self.vc.is_connected():
             return True
 
     async def play(self, ctx: commands.Context, search: str):
@@ -236,22 +229,25 @@ class Music(commands.Cog):
 
     # Faz a pesquisa de playlists
     async def playlist_lookup(self, search: str, requester: str, decode: dict | None = None):
+        # Se decode for truthy é Spotify
         if decode:
             async for track in spotify.SpotifyTrack.iterator(query=search, type=decode['type']):
                 track.requester = requester
-
                 await self.queue.put_wait(track)
-                await self.queue_view.refresh()
+        # Do contrário é YouTube
         else:
             tracks = await wavelink.YouTubePlaylist.search(query=search)
 
             for track in tracks.tracks:
                 track.requester = requester
-
                 await self.queue.put_wait(track)
-                await self.queue_view.refresh()
 
+        # Atualiza view
+        await self.queue_view.refresh()
+
+    # Reproduz música
     async def play_song(self, track: wavelink.YouTubeTrack = None):
+        # Caso track for None tenta pegar uma música na fila
         if not track:
             if self.queue.is_empty:
                 await self.display_view.reset()
@@ -259,15 +255,19 @@ class Music(commands.Cog):
             try:
                 track = await asyncio.wait_for(self.queue.get_wait(), timeout=180)
             except asyncio.TimeoutError:
-                await self.leave(True)
+                await self.reset(leave=True)
+                return
 
+        # Coloca música e atualiza views
         await self.vc.play(track, pause=False)
         await self.display_view.refresh(track)
         await self.queue_view.refresh()
 
+        # Loga informações no arquivo de log
         requester = track.requester if hasattr(track, 'requester') else None
-        self.logger.error(f'{track.title} requested by {requester}')
+        self.logger.info(f'{track.title} requested by {requester}')
 
+    # Pausa a música
     async def pause(self, interaction: discord.Interaction):
         if not self.vc.is_paused():
             await self.vc.pause()
@@ -277,6 +277,7 @@ class Music(commands.Cog):
 
         await interaction.response.send_message(message, ephemeral=True, delete_after=5)
 
+    # Despausa a música
     async def resume(self, interaction: discord.Interaction):
         if self.vc.is_paused():
             await self.vc.resume()
@@ -286,18 +287,21 @@ class Music(commands.Cog):
 
         await interaction.response.send_message(message, ephemeral=True, delete_after=5)
 
+    # Pula música atual
     async def skip(self, interaction: discord.Interaction):
         await self.vc.stop()
         await interaction.response.send_message('Música skipada!', ephemeral=True, delete_after=5)
 
+    # Para bot
     async def stop(self, interaction: discord.Interaction, leave: bool):
         message = 'Saindo!' if leave else 'Parado!'
-
         await interaction.response.send_message(message, ephemeral=True, delete_after=5)
-        await self.leave(leave)
+
+        await self.reset(leave=leave)
+
 
     # Reseta o bot e variáveis
-    async def leave(self, leave: bool = True):
+    async def reset(self, leave: bool):
         if self.playlist_loop and not self.playlist_loop.done():
             self.playlist_loop.cancel()
 
@@ -313,10 +317,7 @@ class Music(commands.Cog):
         await self.display_view.reset()
         await self.queue_view.reset()
 
-        self.vc = None
-        self.playlist_loop = None
-        self.queue = None
-
+    # Ativa loop pra música atual
     async def loop(self, interaction: discord.Interaction):
         status = 'Pausado' if self.vc.is_paused() else 'Tocando'
         embed = interaction.message.embeds[0]
@@ -335,6 +336,7 @@ class Music(commands.Cog):
         await interaction.response.send_message(message, ephemeral=True, delete_after=5)
         await self.display_view.message.edit(embed=embed)
 
+    # Embaralha a fila de músicas
     async def shuffle(self, interaction: discord.Interaction):
         temp_queue = [track for track in self.queue]
         random.shuffle(temp_queue)
@@ -349,7 +351,8 @@ class Music(commands.Cog):
 
     # Retorna tempo de fila
     def get_waiting_time(self):
-        seconds = self.vc.position - self.queue.duration
+        # seconds = (self.vc.track.duration - self.vc.position) - self.queue.duration
+        seconds = self.vc.position + self.queue.duration
         return format_time(seconds)
 
     @commands.hybrid_command(name='play', description='Pesquisa por uma música e adiciona na fila')
@@ -385,6 +388,7 @@ class Music(commands.Cog):
     async def _shuffle(self, ctx: commands.Context):
         await self.shuffle(ctx.interaction)
 
+    # Coloca uma música em uma posição específica na fila
     @commands.hybrid_command(name='put-at', description='Coloca uma música na ordem desejada')
     @commands.before_invoke(bot_is_ready)
     @app_commands.rename(index='índice', new_index='novo_índice')
@@ -396,36 +400,35 @@ class Music(commands.Cog):
         new_index -= 1
 
         try:
-            track = self.vc.queue[index]
+            track: wavelink.YouTubeTrack = self.queue[index]
         except IndexError:
-            await interaction.response.send_message('Índice atual não existe!', ephemeral=True, delete_after=5)
-            return
-
-        if index > self.vc.queue.count:
-            await interaction.response.send_message('Novo índice não existe!', ephemeral=True, delete_after=5)
+            message = 'Índice atual não existe!'
         else:
-            del self.vc.queue[index]
+            if index > self.queue.count:
+                message = 'Novo índice não existe!'
+            else:
+                del self.queue[index]
+                self.queue.put_at_index(new_index, track)
+                message = f'{track.title} mudado para a posição {new_index + 1} na fila!'
 
-            self.vc.queue.put_at_index(new_index, track)
-            await interaction.response.send_message(f'{track.title} mudado para a posição {new_index + 1} na fila!',
-                                                    ephemeral=True, delete_after=5)
+        await interaction.response.send_message(message, ephemeral = True, delete_after = 5)
 
+    # Retorna um view com todos os logs do bot
     @commands.hybrid_command(name='history', description='Histórico de músicas tocadas')
-    async def history(self, ctx: commands.Context):
+    async def _history(self, ctx: commands.Context):
         interaction = ctx.interaction
 
         root = os.path.join(ROOT, 'logs')
-        options = []
-
-        for file in os.listdir(root):
-            options.append(file)
+        options = [file for file in os.listdir(root)]
 
         if len(options) == 0:
             interaction.response.send_message('Não há nenhum arquivo de log no sistema', delete_after=5)
             return
 
         view = HistoryView(options)
-        await interaction.response.send_message(view=view, delete_after=300)
+        await interaction.response.send_message(view=view)
+
+        view.message = await interaction.original_response()
 
 
 class HistoryView(discord.ui.View):
@@ -433,27 +436,34 @@ class HistoryView(discord.ui.View):
         super().__init__(timeout=300)
 
         self.root = os.path.join(ROOT, 'logs')
+        self.response: discord.Message = None
+        self.message: discord.Message = None
 
         for option in options:
             self.select_history.add_option(label=option)
+
+    # Deleta mensagens ao timeout
+    async def on_timeout(self):
+        await self.message.delete()
+
+        if self.response:
+            await self.response.delete()
 
     @discord.ui.select(cls=discord.ui.Select, placeholder='Selecione a data de referência')
     async def select_history(self, interaction: discord.Interaction, select: discord.ui.Select):
         selection = select.values[0]
         fullname = os.path.join(self.root, selection)
-        select.placeholder = selection
+        file = discord.File(fullname, filename=selection)
 
-        with open(fullname, 'r') as f:
-            content = f.read()
+        # Caso seja a primeira resposta responde à interação e salva resposta na memória
+        if not self.response:
+            await interaction.response.send_message(file=file)
+            self.response = await interaction.original_response()
+        # Do contrário atrasa a interação e apenas edita a resposta
+        else:
+            await interaction.response.defer()
+            await self.response.edit(attachments=[file])
 
-        if not content:
-            content = 'Não há logs nesse arquivo.'
-
-        content = f'```\n{content}```'
-        await interaction.response.edit_message(content=content, view=self)
-
-
-# noinspection PyTypeChecker
 class QueueView(discord.ui.View):
     def __init__(self, message: discord.Message, music_cog: Music):
         super().__init__(timeout=None)
@@ -506,7 +516,8 @@ class QueueView(discord.ui.View):
             await self.reset()
             return
 
-        self.max_page = floor(self.music_cog.queue.count / 25) if self.music_cog.queue.count else 0
+        self.max_page = floor(self.music_cog.queue.count / 25) if self.music_cog.queue.count > 0 else 0
+
         self.previous.disabled = True if self.page == 0 else False
         self.next.disabled = True if self.max_page == 0 else False
 
@@ -571,18 +582,18 @@ class DisplayView(discord.ui.View):
             embed.set_footer(text='Tocando')
             embed.colour = discord.Colour.green()
 
-            await self.music_cog.resume(interaction)
-
             button.label = 'Pausar'
             button.emoji = '▶'
+
+            await self.music_cog.resume(interaction)
         else:
             embed.set_footer(text='Pausado')
             embed.colour = discord.Colour.orange()
 
-            await self.music_cog.pause(interaction)
-
             button.label = 'Tocar'
             button.emoji = '⏸'
+
+            await self.music_cog.pause(interaction)
 
         await self.message.edit(content=None, embed=embed, view=self, attachments=[])
 
@@ -656,8 +667,56 @@ class Queue(wavelink.WaitQueue):
         self._duration = 0
 
 
-class Track(wavelink.Track):
-    pass
+# Subclasse de logging.Logger responsável por logar músicas ao tocá-las
+class Logger(logging.Logger):
+    def __init__(self, name=__name__):
+        super().__init__(name)
+
+        self.date = None
+        self.setLevel(logging.INFO)
+
+    # Cria um novo handler
+    def _create_handler(self, date):
+        if not os.path.exists('logs'):
+            os.makedirs('logs')
+
+        root = os.path.join(ROOT, 'logs')
+        filename = f"{date.strftime('%d-%m')}.log"
+
+        handler = logging.FileHandler(os.path.join(root, filename), mode='a')
+        formatter = logging.Formatter('%(asctime)s | %(message)s', datefmt='%d/%m/%y %H:%M:%S')
+
+        handler.setFormatter(formatter)
+
+        # Deleta o handler existente e adiciona um novo
+        self.handlers.clear()
+        self.addHandler(handler)
+        self.date = date
+
+        logs = os.listdir(root)
+
+        # Caso a quantidade de logs ultrapasse 7, deleta o mais antigo
+        if len(logs) > 7:
+            oldest_log = (datetime.now(), None)
+
+            for file in logs:
+                fullname = os.path.join(root, file)
+                creation_time = datetime.fromtimestamp(os.path.getctime(fullname))
+
+                if creation_time < oldest_log[0]:
+                    oldest_log = (creation_time, fullname)
+
+            os.remove(oldest_log[1])
+
+    # Loga informações
+    def info(self, *args, **kwargs):
+        date = datetime.now().date()
+
+        # Verifica se o handler é referente a data atual, se não for cria outro
+        if date != self.date:
+            self._create_handler(date)
+
+        super().info(*args, **kwargs)
 
 
 async def setup(bot: commands.Bot):
