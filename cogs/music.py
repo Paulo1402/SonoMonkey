@@ -299,7 +299,6 @@ class Music(commands.Cog):
 
         await self.reset(leave=leave)
 
-
     # Reseta o bot e variáveis
     async def reset(self, leave: bool):
         if self.playlist_loop and not self.playlist_loop.done():
@@ -416,10 +415,17 @@ class Music(commands.Cog):
     # Retorna um view com todos os logs do bot
     @commands.hybrid_command(name='history', description='Histórico de músicas tocadas')
     async def _history(self, ctx: commands.Context):
+        def _sorted(x):
+            day = int(x[:2])
+            month = int(x[3:5])
+
+            return month, day
+
         interaction = ctx.interaction
 
         root = os.path.join(ROOT, 'logs')
         options = [file for file in os.listdir(root)]
+        options = sorted(options, key=_sorted)
 
         if len(options) == 0:
             interaction.response.send_message('Não há nenhum arquivo de log no sistema', delete_after=5)
@@ -435,7 +441,6 @@ class HistoryView(discord.ui.View):
     def __init__(self, options):
         super().__init__(timeout=300)
 
-        self.root = os.path.join(ROOT, 'logs')
         self.response: discord.Message = None
         self.message: discord.Message = None
 
@@ -452,7 +457,7 @@ class HistoryView(discord.ui.View):
     @discord.ui.select(cls=discord.ui.Select, placeholder='Selecione a data de referência')
     async def select_history(self, interaction: discord.Interaction, select: discord.ui.Select):
         selection = select.values[0]
-        fullname = os.path.join(self.root, selection)
+        fullname = os.path.join(ROOT, 'logs', selection)
         file = discord.File(fullname, filename=selection)
 
         # Caso seja a primeira resposta responde à interação e salva resposta na memória
@@ -463,6 +468,7 @@ class HistoryView(discord.ui.View):
         else:
             await interaction.response.defer()
             await self.response.edit(attachments=[file])
+
 
 class QueueView(discord.ui.View):
     def __init__(self, message: discord.Message, music_cog: Music):
