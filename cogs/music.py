@@ -1,16 +1,18 @@
+import os
+import json
+import random
+import logging
+import asyncio
+from datetime import datetime
+from math import floor
+
 import discord
 import wavelink
-import logging
-import os
-import asyncio
-import random
-import json
-from datetime import datetime
-from utils.utils import *
-from math import floor
 from wavelink.ext import spotify
 from discord import app_commands
 from discord.ext import commands
+
+from utils import *
 
 
 MUSIC_CHANNEL_ID = 999002277186637854
@@ -410,7 +412,7 @@ class Music(commands.Cog):
                 self.queue.put_at_index(new_index, track)
                 message = f'{track.title} mudado para a posição {new_index + 1} na fila!'
 
-        await interaction.response.send_message(message, ephemeral = True, delete_after = 5)
+        await interaction.response.send_message(message, ephemeral=True, delete_after=5)
 
     # Retorna um view com todos os logs do bot
     @commands.hybrid_command(name='history', description='Histórico de músicas tocadas')
@@ -611,11 +613,11 @@ class DisplayView(discord.ui.View):
     async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.music_cog.stop(interaction, leave=False)
 
-    @discord.ui.button(label='Loop', emoji='🔁', style=discord.ButtonStyle.gray, custom_id='display:loop',)
+    @discord.ui.button(label='Loop', emoji='🔁', style=discord.ButtonStyle.gray, custom_id='display:loop', )
     async def loop(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.music_cog.loop(interaction)
 
-    @discord.ui.button(label='Aleatório', emoji='🔀', style=discord.ButtonStyle.gray, custom_id='display:shuffle',)
+    @discord.ui.button(label='Aleatório', emoji='🔀', style=discord.ButtonStyle.gray, custom_id='display:shuffle', )
     async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.music_cog.shuffle(interaction)
 
