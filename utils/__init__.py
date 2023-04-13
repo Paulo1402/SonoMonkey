@@ -4,7 +4,12 @@ from wavelink.ext import spotify
 from urllib.parse import urlparse
 
 
-__all__ = ['format_time', 'is_url', 'is_playlist', 'ROOT']
+__all__ = [
+    'format_time',
+    'is_url',
+    'is_playlist',
+    'ROOT'
+]
 
 ROOT = os.getcwd()
 

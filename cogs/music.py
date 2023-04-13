@@ -15,9 +15,19 @@ from discord.ext import commands
 from utils import *
 
 
+# todo Bugs
+# 1- Bot não toca quando sai e entra de novo, é necessário reiniciar no server.
+# Ele coloca a música na playlist view e na display view mais não a toca
+# Provavelmente deva ser algum problema com a conexão do lavalink (VERIFICAR!)
+# 2- Botão "próximo" da playlist view liberado mesmo sem haver próxima página.
+# Também é necessário bloquear interação com mais de um usuário por vez. Talvez usar um lock do modulo threading??
+# 3- Ao enviar um link inválido ou algo que não possa ser reconhecido ignorar a interação e apagar a mensagem
+
+
 MUSIC_CHANNEL_ID = 999002277186637854
 
 
+# Classe principal da cog
 class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -48,7 +58,7 @@ class Music(commands.Cog):
 
     # Disparado ao acabar uma música
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason: str):
+    async def on_wavelink_track_end(self, _, track: wavelink.Track, reason: str):
         if reason == 'REPLACED':
             return
 
@@ -90,7 +100,7 @@ class Music(commands.Cog):
 
     # Disparado ao ter uma alteração em algum canal de voz
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState,
+    async def on_voice_state_update(self, member: discord.Member, _,
                                     after: discord.VoiceState):
         # Retorna caso o bot não esteja conectado
         if not self.vc or (self.vc and not self.vc.is_connected()):
