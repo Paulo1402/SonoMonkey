@@ -165,7 +165,7 @@ cython_debug/
 # Local Folders
 ffmpeg/
 lavalink/
-Legado/
+legado/
 logs/*
 
 # Local files

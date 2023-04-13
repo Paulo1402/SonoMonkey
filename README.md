@@ -1,6 +1,6 @@
 # ❤ SonoMonkey
 
-Bot de músicas para discord criado em Python usando o framework Discord.py.
+Bot de músicas para Discord criado em Python usando o framework Discord.py.
 
 ![preview](./.github/preview.png)
 
@@ -28,7 +28,7 @@ LAVALINK_PASSWORD=SENHA_DO_LAVALINK
 
 A importação dessas variáveis é feita automaticamente dentro do código.
 
-## Funcionalidades 🎶
+## 🎶 Funcionalidades 
 
 - Pausar músicas.
 - Pular música atual.
