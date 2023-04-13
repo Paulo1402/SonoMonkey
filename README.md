@@ -14,11 +14,11 @@ O Spotify não permite a reprodução de seu contéudo externamente, portanto pa
 
 Para usar o bot é necessário criar um arquivo de ambiente (.env) e inserir as seguintes informações
 
-`TOKEN=TOKEN_DO_SEU_BOT
-SPOTIFY_ID=ID_DA_SUA_API_DO_SPOTIFY
-SPOTIFY_SECRET=SECRET_DA_SUA_API_DO_SPOTIFY
-LAVALINK_HOST=NOME_DO_HOST_DO_LAVALINK
-LAVALINK_PASSWORD=SENHA_DO_LAVALINK`
+`TOKEN=TOKEN_DO_SEU_BOT`
+`SPOTIFY_ID=ID_DA_SUA_API_DO_SPOTIFY`
+`SPOTIFY_SECRET=SECRET_DA_SUA_API_DO_SPOTIFY`
+`LAVALINK_HOST=NOME_DO_HOST_DO_LAVALINK`
+`LAVALINK_PASSWORD=SENHA_DO_LAVALINK`
 
 A importação dessas váriaveis é feita automaticamente dentro do código.
 
