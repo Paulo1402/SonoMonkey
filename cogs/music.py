@@ -68,8 +68,8 @@ class GuildPool:
         """
         if guild_id in self._pool.keys():
             del self._pool[guild_id]
-        
-        
+
+
 class GuildHandler:
     """Handler para armazenar dados da guild."""
 
@@ -134,6 +134,16 @@ class GuildHandler:
         guild['channel_id'] = channel.id
         guild['display_message_id'] = display_message.id
         guild['queue_message_id'] = queue_message.id
+
+    async def check_channel(self, ctx: commands.Context):
+        """Checa se o canal exclusivo existe."""
+        channel = self.music_cog.bot.get_channel(self.views_channel_id)
+
+        # Se não existe recria-a
+        if not channel:
+            await ctx.defer()
+            await self.setup_channel()
+            self.music_cog.config_proxy.save()
 
     @staticmethod
     async def _check_message(channel: discord.TextChannel, message_id: int) -> discord.Message:
@@ -301,7 +311,7 @@ class Music(commands.Cog):
         """
         handler = GuildHandler(guild, self)
         await handler.setup_channel()
-        
+
         self.guild_pool.add_handler(handler)
         self.config_proxy.save()
 
@@ -315,8 +325,8 @@ class Music(commands.Cog):
         """
         self.guild_pool.remove_handler(guild.id)
 
-        self.config_proxy.remove_guild(guild.id)
-        self.config_proxy.save()
+        # self.config_proxy.remove_guild(guild.id)
+        # self.config_proxy.save()
         
     @commands.Cog.listener()
     async def on_ready(self):
@@ -453,6 +463,7 @@ class Music(commands.Cog):
 
         return True
 
+    # noinspection PyTypeChecker
     async def join(self, ctx: commands.Context) -> bool:
         """
         Entra no canal do usuário caso esteja em um.
@@ -468,13 +479,16 @@ class Music(commands.Cog):
 
             return False
 
+        handler = self.guild_pool.get_handler(user.guild.id)
+        player = handler.player
+
         channel = user.voice.channel
-        player = self.guild_pool.get_handler(user.guild.id).player
 
         if player:
             await player.move_to(channel)
         else:
-            # noinspection PyTypeChecker
+            # Checa se o canal exclusivo existe
+            await handler.check_channel(ctx)
             await channel.connect(cls=Player())
 
         return True
@@ -573,6 +587,7 @@ class Music(commands.Cog):
         requester = track.requester if hasattr(track, 'requester') else None
         handler.logger.info(f'{track.title} requested by {requester}')
 
+    # noinspection PyUnresolvedReferences
     async def pause(self, interaction: discord.Interaction):
         """
         Pausa a música.
@@ -581,16 +596,35 @@ class Music(commands.Cog):
         """
         handler = self.guild_pool.get_handler(interaction.guild_id)
         player = handler.player
+        display = handler.display_view
 
-        if not player.is_paused():
-            await player.pause()
-            message = 'Pediu pra parar parou!'
-        else:
-            message = 'Já estou pausado!'
+        if not player.is_playing() and not player.is_paused():
+            await interaction.response.send_message(
+                'Coloque algo para tocar primeiro! :see_no_evil: ',
+                ephemeral=True,
+                delete_after=5
+            )
+            return
 
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(message, ephemeral=True, delete_after=5)
+        if player.is_paused():
+            await interaction.response.send_message('Já estou pausado!', ephemeral=True, delete_after=5)
+            return
 
+        # Atualiza view
+        embed = display.message.embeds[0]
+        embed.set_footer(text='Pausado')
+        embed.colour = discord.Colour.orange()
+
+        button = display.play_pause
+        button.label = 'Tocar'
+        button.emoji = '⏸'
+
+        await player.pause()
+        await display.message.edit(content=None, embed=embed, view=display, attachments=[])
+
+        await interaction.response.send_message('Pediu pra parar parou!', ephemeral=True, delete_after=5)
+
+    # noinspection PyUnresolvedReferences
     async def resume(self, interaction: discord.Interaction):
         """
         Retoma música.
@@ -599,15 +633,33 @@ class Music(commands.Cog):
         """
         handler = self.guild_pool.get_handler(interaction.guild_id)
         player = handler.player
+        display = handler.display_view
 
-        if player.is_paused():
-            await player.resume()
-            message = 'Pediu pra voltar voltou!'
-        else:
-            message = 'Não estou pausado!'
+        if not player.is_playing() and not player.is_paused():
+            await interaction.response.send_message(
+                'Coloque algo para tocar primeiro! :see_no_evil: ',
+                ephemeral=True,
+                delete_after=5
+            )
+            return
 
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(message, ephemeral=True, delete_after=5)
+        if not player.is_paused():
+            await interaction.response.send_message('Não estou pausado!', ephemeral=True, delete_after=5)
+            return
+
+        # Atualiza view
+        embed = display.message.embeds[0]
+        embed.set_footer(text='Tocando')
+        embed.colour = discord.Colour.green()
+
+        button = display.play_pause
+        button.label = 'Pausar'
+        button.emoji = '▶'
+
+        await player.resume()
+        await display.message.edit(content=None, embed=embed, view=display, attachments=[])
+
+        await interaction.response.send_message('Pediu pra voltar voltou!', ephemeral=True, delete_after=5)
 
     async def skip(self, interaction: discord.Interaction):
         """
@@ -672,6 +724,11 @@ class Music(commands.Cog):
         """
         handler = self.guild_pool.get_handler(interaction.guild_id)
         player = handler.player
+
+        if player.queue.is_empty:
+            # noinspection PyUnresolvedReferences
+            await interaction.response.send_message('Não há músicas na fila!', ephemeral=True, delete_after=5)
+            return
 
         # Faz cópia da fila e a embaralha
         temp_queue = [track for track in player.queue]
@@ -1086,34 +1143,19 @@ class DisplayView(discord.ui.View):
         return self
 
     @discord.ui.button(label='Pausar', emoji='⏸', style=discord.ButtonStyle.gray, custom_id='display:play_pause')
-    async def play_pause(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def play_pause(self, interaction: discord.Interaction, _):
         """
         Pausa ou retoma música atual.
 
         :param interaction: Objeto de interação
-        :param button: Button de interação
+        :param _: Button de interação
         """
-        embed = interaction.message.embeds[0]
         player = self.handler.player
 
         if player.is_paused():
-            embed.set_footer(text='Tocando')
-            embed.colour = discord.Colour.green()
-
-            button.label = 'Pausar'
-            button.emoji = '▶'
-
             await self.music_cog.resume(interaction)
         else:
-            embed.set_footer(text='Pausado')
-            embed.colour = discord.Colour.orange()
-
-            button.label = 'Tocar'
-            button.emoji = '⏸'
-
             await self.music_cog.pause(interaction)
-
-        await self.message.edit(content=None, embed=embed, view=self, attachments=[])
 
     @discord.ui.button(label='Próximo', emoji='⏭', style=discord.ButtonStyle.gray, custom_id='display:next')
     async def skip(self, interaction: discord.Interaction, _):
@@ -1156,7 +1198,7 @@ class DisplayView(discord.ui.View):
         for button in self.children:
             button.disabled = False
 
-        await self.message.edit(content=None, embed=embed, view=self, attachments=[])
+        self.message = await self.message.edit(content=None, embed=embed, view=self, attachments=[])
 
     async def reset(self):
         """Reseta a view para o padrão."""
@@ -1171,7 +1213,7 @@ class DisplayView(discord.ui.View):
         for button in self.children:
             button.disabled = True
 
-        await self.message.edit(content=None, embed=embed, view=self, attachments=[file])
+        self.message = await self.message.edit(content=None, embed=embed, view=self, attachments=[file])
 
 
 class SeekView(QueueView):
@@ -1253,6 +1295,9 @@ class Logger(logging.Logger):
         self.date: date | None = None
         self.root_dir: str = os.path.join(ROOT, 'logs', str(guild_id))
 
+        os.makedirs('logs', exist_ok=True)
+        os.makedirs(self.root_dir, exist_ok=True)
+
         self.setLevel(logging.INFO)
 
     def _create_handler(self, new_date: date):
@@ -1261,9 +1306,6 @@ class Logger(logging.Logger):
 
         :param new_date: Nova data para criar o arquivo de log
         """
-        os.makedirs('logs', exist_ok=True)
-        os.makedirs(self.root_dir, exist_ok=True)
-
         filename = f"{new_date.strftime('%d-%m')}.log"
 
         handler = logging.FileHandler(os.path.join(self.root_dir, filename), mode='a')

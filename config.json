@@ -6,17 +6,17 @@
       "display_message_id": 1048248572296052736,
       "queue_message_id": 1048248574569361418
     },
-    "1102568667285311550": {
-      "guild_name": "SonoMonkey's Tests",
-      "channel_id": 1104478317094117587,
-      "display_message_id": 1104478320403423302,
-      "queue_message_id": 1104478322378948799
-    },
     "464219870628675584": {
       "guild_name": "Maiden",
       "channel_id": 1104566170352365679,
       "display_message_id": 1104566174295011359,
       "queue_message_id": 1104566176689954926
+    },
+    "1102568667285311550": {
+      "guild_name": "SonoMonkey's Tests",
+      "channel_id": 1105623759156682803,
+      "display_message_id": 1105623762180767865,
+      "queue_message_id": 1105623764181454968
     }
   }
 }
