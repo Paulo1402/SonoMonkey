@@ -166,7 +166,8 @@ cython_debug/
 ffmpeg/
 lavalink/
 legado/
-logs/*
+logs/
+tests/
 
 # Local files
-temp.py
+

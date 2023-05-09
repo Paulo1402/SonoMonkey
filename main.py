@@ -6,36 +6,34 @@ from discord import Intents
 from discord.ext import commands
 
 
-GUILD_ID = 742892816937779201
-
-
-# Classe principal
 class SonoMonkey(commands.Bot):
+    """Classe principal."""
+
     def __init__(self):
         # Habilita permissões para o bot
         intents = Intents.default()
         intents.message_content = True
         intents.members = True
+        intents.guilds = True
 
         # Cria o bot
         super().__init__(command_prefix='$', intents=intents, help_command=None)
 
-        # Carrega variáveis do ambiente
-        dotenv.load_dotenv()
-
-    # Retorna o token armazenado no arquivo .env
     @property
     def token(self):
+        """Retorna o token armazenado no arquivo .env."""
         return os.getenv('TOKEN')
 
-    # Disparado ao iniciar o bot
     async def on_ready(self):
-        print(f"Logged in as {self.user} (ID: {self.user})")
+        """Disparado ao bot se conectar a api do discord."""
+        print(f"Logged in as {self.user} (ID: {self.user.id})")
 
 
 async def main():
+    # Instância do bot
     bot = SonoMonkey()
 
+    # Adiciona cogs ao bot e inicia o loop
     async with bot:
         await bot.load_extension('cogs.music')
         await bot.load_extension('cogs.adm')
@@ -43,5 +41,7 @@ async def main():
 
 
 if __name__ == '__main__':
+    # Carrega variáveis do ambiente e executa entry point
+    dotenv.load_dotenv()
     asyncio.run(main())
 
