@@ -571,6 +571,8 @@ class Music(commands.Cog):
             await self.reset(handler, leave=True)
             return
 
+        print(track.title)
+
         # Converte música para YouTubeTrack
         # Isso já é feito automaticamente em player.play(), porém acaba demorando alguns segundos para retornar
         # E as views ficam aguardando o retorno para serem atualizadas.
@@ -578,8 +580,31 @@ class Music(commands.Cog):
             # noinspection PyTypeChecker
             track = await track.fulfill(player=player, cls=wavelink.YouTubeTrack, populate=False)
 
+        # todo BUGS
+        #  As vezes há algum problema na conexão com o lavalink e é levantada a exception InvalidLavaLinkResponse
+        #  Ainda não descobri como contornar, talvez reconectar os nodes??
+        try:
+            await player.play(track)
+        except wavelink.InvalidLavalinkResponse as e:
+            print('Error during play', e.__class__, e)
+
+            try:
+                node = wavelink.NodePool.get_node('main')
+                print(node.id, node.status)
+
+                await player.play(track, replace=True)
+            except wavelink.InvalidNode:
+                print('invalid node')
+
+                try:
+                    await self.connect_nodes()
+
+                    await player.connect(timeout=10, reconnect=True)
+                    await player.play(track)
+                except Exception as e:
+                    print('Error during reconnect', e.__class__, e)
+
         # Atualiza views
-        await player.play(track)
         await handler.display_view.refresh(track)
         await handler.queue_view.refresh()
 
@@ -670,6 +695,7 @@ class Music(commands.Cog):
         handler = self.guild_pool.get_handler(interaction.guild_id)
         player = handler.player
 
+        # Exception levantada dentro de stop e não é tratada
         await player.stop()
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message('Música skipada!', ephemeral=True, delete_after=5)
@@ -804,7 +830,11 @@ class Music(commands.Cog):
             handler.playlist_loop.cancel()
 
         player.queue.clear()
-        await player.stop()
+
+        try:
+            await player.stop()
+        except wavelink.InvalidLavalinkResponse:
+            pass
 
         if leave:
             await player.disconnect()
@@ -1110,7 +1140,9 @@ class DisplayView(discord.ui.View):
         self.message = message
         self.music_cog = music_cog
         self.handler = handler
-        self.no_music_image = os.path.join(ROOT, 'assets', 'monki.jpg')
+
+        self._default_img_path = os.path.join(ROOT, 'assets', 'monki.jpg')
+        self._default_img = discord.File(self._default_img_path, filename='no_music.jpg')
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """
@@ -1186,7 +1218,14 @@ class DisplayView(discord.ui.View):
 
         # track.duration retorna o resultado em milisegundos
         duration = format_time(track.duration / 1000)
-        thumb = track.thumb if hasattr(track, 'thumb') else None
+
+        attachments = []
+
+        if hasattr(track, 'thumb'):
+            thumb = track.thumb
+        else:
+            thumb = 'attachment://no_music.jpg'
+            attachments.append(self._default_img)
 
         embed = discord.Embed(title=track.title, colour=discord.Colour.green())
         embed.add_field(name='Artista', value=track.author)
@@ -1198,7 +1237,7 @@ class DisplayView(discord.ui.View):
         for button in self.children:
             button.disabled = False
 
-        self.message = await self.message.edit(content=None, embed=embed, view=self, attachments=[])
+        self.message = await self.message.edit(content=None, embed=embed, view=self, attachments=attachments)
 
     async def reset(self):
         """Reseta a view para o padrão."""
@@ -1207,13 +1246,13 @@ class DisplayView(discord.ui.View):
             description='Use /Play [Pesquisa] ou envie um link nesse canal',
             colour=discord.Color.dark_green()
         )
+
         embed.set_image(url='attachment://no_music.jpg')
-        file = discord.File(self.no_music_image, filename='no_music.jpg')
 
         for button in self.children:
             button.disabled = True
 
-        self.message = await self.message.edit(content=None, embed=embed, view=self, attachments=[file])
+        self.message = await self.message.edit(content=None, embed=embed, view=self, attachments=[self._default_img])
 
 
 class SeekView(QueueView):
