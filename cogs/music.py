@@ -80,6 +80,7 @@ class GuildHandler:
         self.display_view: DisplayView | None = None
         self.queue_view: QueueView | None = None
         self.views_channel_id: int | None = None
+        self.reset: bool = False
 
         self.playlist_loop: asyncio.Task | None = None
         self.logger: Logger = Logger(guild.id)
@@ -183,6 +184,7 @@ class GuildHandler:
 
 class ConfigProxy:
     """Proxy para manipular configurações em memória."""
+
     def __init__(self):
         self._config_path = os.path.join(ROOT, 'config.json')
         self.config: dict | None = None
@@ -258,6 +260,7 @@ class ConfigProxy:
         self.add_guild(guild_id, data)
 
 
+# noinspection PyCallingNonCallable
 class Music(commands.Cog):
     """Cog para recursos de músicas."""
 
@@ -285,7 +288,10 @@ class Music(commands.Cog):
             return
 
         handler = self.guild_pool.get_handler(payload.player.guild.id)
-        await self.play_song(handler)
+
+        # Essa flag vai garantir que o método não seja chamado quando self.reset() for chamado
+        if not handler.reset:
+            await self.play_song(handler)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, _, after: discord.VoiceState):
@@ -480,8 +486,9 @@ class Music(commands.Cog):
             return False
 
         handler = self.guild_pool.get_handler(user.guild.id)
-        player = handler.player
+        handler.reset = False
 
+        player = handler.player
         channel = user.voice.channel
 
         if player:
@@ -594,7 +601,7 @@ class Music(commands.Cog):
             await self.connect_nodes()
 
             # await player.connect(timeout=10, reconnect=True)
-            # await player.play(track)
+            await player.play(track)
 
         # Atualiza views
         await handler.display_view.refresh(track)
@@ -823,8 +830,11 @@ class Music(commands.Cog):
 
         player.queue.clear()
 
-        # Ignora erro de conexão caso aconteça
+        # Caso player.stop() seja executado sem erros isso irá acionar o hook on_wavelink_track_end que por sua vez
+        # tentará coletar outra música na fila, para evitar esse comportamento bloqueamos a execução de play_song()
+        # através da flag handler.reset
         try:
+            handler.reset = True
             await player.stop()
         except wavelink.InvalidLavalinkResponse:
             pass
@@ -1136,7 +1146,6 @@ class DisplayView(discord.ui.View):
         self.handler = handler
 
         self._default_img_path = os.path.join(ROOT, 'assets', 'monki.jpg')
-        self._default_img = discord.File(self._default_img_path, filename='no_music.jpg')
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """
@@ -1220,7 +1229,8 @@ class DisplayView(discord.ui.View):
             thumb = track.thumb
         else:
             thumb = 'attachment://no_music.jpg'
-            attachments.append(self._default_img)
+            default = discord.File(self._default_img_path, filename='no_music.jpg')
+            attachments.append(default)
 
         embed = discord.Embed(title=track.title, colour=discord.Colour.green())
         embed.add_field(name='Artista', value=track.author)
@@ -1243,11 +1253,12 @@ class DisplayView(discord.ui.View):
         )
 
         embed.set_image(url='attachment://no_music.jpg')
+        default = discord.File(self._default_img_path, filename='no_music.jpg')
 
         for button in self.children:
             button.disabled = True
 
-        self.message = await self.message.edit(content=None, embed=embed, view=self, attachments=[self._default_img])
+        self.message = await self.message.edit(content=None, embed=embed, view=self, attachments=[default])
 
 
 class SeekView(QueueView):
