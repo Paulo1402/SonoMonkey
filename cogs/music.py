@@ -582,27 +582,19 @@ class Music(commands.Cog):
 
         # todo BUGS
         #  As vezes há algum problema na conexão com o lavalink e é levantada a exception InvalidLavaLinkResponse
-        #  Ainda não descobri como contornar, talvez reconectar os nodes??
+        #  Ainda não descobri como contornar, talvez reconectar os nodes?? TENTAR RECONECTAR NODES
         try:
             await player.play(track)
         except wavelink.InvalidLavalinkResponse as e:
-            print('Error during play', e.__class__, e)
+            print('Error during connection to lavalink server, restarting node. Error: ', e)
 
-            try:
-                node = wavelink.NodePool.get_node('main')
-                print(node.id, node.status)
+            nodes: dict[str, wavelink.Node] = wavelink.NodePool.nodes
+            del nodes['main']
 
-                await player.play(track, replace=True)
-            except wavelink.InvalidNode:
-                print('invalid node')
+            await self.connect_nodes()
 
-                try:
-                    await self.connect_nodes()
-
-                    await player.connect(timeout=10, reconnect=True)
-                    await player.play(track)
-                except Exception as e:
-                    print('Error during reconnect', e.__class__, e)
+            # await player.connect(timeout=10, reconnect=True)
+            # await player.play(track)
 
         # Atualiza views
         await handler.display_view.refresh(track)
@@ -831,6 +823,7 @@ class Music(commands.Cog):
 
         player.queue.clear()
 
+        # Ignora erro de conexão caso aconteça
         try:
             await player.stop()
         except wavelink.InvalidLavalinkResponse:
@@ -1027,6 +1020,7 @@ class QueueView(discord.ui.View):
             return True
 
         await interaction.response().send_message('Entre no canal primeiro!', delete_after=5)
+        return False
 
     @classmethod
     async def create_view(cls, message: discord.Message, handler: GuildHandler) -> QueueView:
@@ -1157,6 +1151,7 @@ class DisplayView(discord.ui.View):
             return True
 
         await interaction.response().send_message('Entre no canal primeiro!', delete_after=5)
+        return False
 
     @classmethod
     async def create_view(cls, message: discord.Message, music_cog: Music, handler: GuildHandler) -> DisplayView:
@@ -1216,7 +1211,7 @@ class DisplayView(discord.ui.View):
         :param track: Objeto track
         """
 
-        # track.duration retorna o resultado em milisegundos
+        # track.duration retorna o resultado em milliseconds
         duration = format_time(track.duration / 1000)
 
         attachments = []
@@ -1260,6 +1255,7 @@ class SeekView(QueueView):
 
     def __init__(self, message: discord.Message, handler: GuildHandler):
         super().__init__(message, handler)
+
         raise NotImplementedError("Class not yet implemented!")
 
 
