@@ -596,17 +596,15 @@ class Music(commands.Cog):
             print('Error during connection to lavalink server, restarting node. Error: ', e)
 
             try:
-                node = wavelink.NodePool.get_node('main')
+                nodes: dict[str, wavelink.Node] = wavelink.NodePool.nodes
+                node = nodes['main']
                 await node._websocket.cleanup()
 
-                del node
+                # del node
+                del nodes['main']
+                # node = wavelink.NodePool.get_node('main')
 
                 print('successfully cleanup')
-
-                # Isso não reseta o node
-                # nodes: dict[str, wavelink.Node] = wavelink.NodePool.nodes
-                # del nodes['main']
-
                 await self.connect_nodes()
 
                 # await player.connect(timeout=10, reconnect=True)
