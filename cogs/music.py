@@ -605,20 +605,16 @@ class Music(commands.Cog):
 
                 await self.connect_nodes()
 
+                node = wavelink.NodePool.get_connected_node()
+                print('session_id:', node._session_id)
+
+                player.current_node = node
+
                 await player.disconnect()
                 await player.connect(timeout=5, reconnect=True)
-                print('session_id:', player.current_node._session_id)
                 await player.play(track)
             except Exception as e:
-                try:
-                    print('Error during reconnect', e.__class__, e)
-
-                    node = wavelink.NodePool.get_connected_node()
-                    print(node)
-                    player.current_node = node
-                    await player.play(track)
-                except Exception as e:
-                    print('Error during changing connected_node', e.__class__, e)
+                print('Error during changing connected_node', e.__class__, e)
 
         # Atualiza views
         await handler.display_view.refresh(track)
