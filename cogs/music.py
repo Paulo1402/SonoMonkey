@@ -590,6 +590,7 @@ class Music(commands.Cog):
         # todo BUGS
         #  As vezes há algum problema na conexão com o lavalink e é levantada a exception InvalidLavaLinkResponse
         #  Ainda não descobri como contornar, talvez reconectar os nodes?? TENTAR RECONECTAR NODES
+
         try:
             await player.play(track)
         except wavelink.InvalidLavalinkResponse as e:
@@ -604,14 +605,21 @@ class Music(commands.Cog):
                 print('successfully cleanup')
 
                 await self.connect_nodes()
-
                 node = wavelink.NodePool.get_connected_node()
-                print('session_id:', node._session_id)
+                print(node.id, 'session_id:', node._session_id)
 
                 player.current_node = node
 
                 await player.disconnect()
                 await player.connect(timeout=5, reconnect=True)
+
+                asyncio.wait(2)
+
+                # channel = player.channel
+                #
+                # await player.disconnect()
+                # player = await channel.connect(cls=Player())
+
                 await player.play(track)
             except Exception as e:
                 print('Error during changing connected_node', e.__class__, e)
