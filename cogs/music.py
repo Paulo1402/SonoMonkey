@@ -613,7 +613,7 @@ class Music(commands.Cog):
                 await player.disconnect()
                 await player.connect(timeout=5, reconnect=True)
 
-                await asyncio.wait(2)
+                await asyncio.sleep(2)
 
                 # channel = player.channel
                 #
