@@ -601,17 +601,21 @@ class Music(commands.Cog):
 
                 await node._websocket.cleanup()
                 del nodes['main']
-
                 print('successfully cleanup')
+
                 await self.connect_nodes()
 
-                await player.connect(timeout=10, reconnect=True)
+                await player.disconnect()
+                await player.connect(timeout=5, reconnect=True)
+                print('session_id:', player.current_node._session_id)
                 await player.play(track)
             except Exception as e:
                 try:
                     print('Error during reconnect', e.__class__, e)
 
-                    player.current_node = wavelink.NodePool.get_connected_node()
+                    node = wavelink.NodePool.get_connected_node()
+                    print(node)
+                    player.current_node = node
                     await player.play(track)
                 except Exception as e:
                     print('Error during changing connected_node', e.__class__, e)
