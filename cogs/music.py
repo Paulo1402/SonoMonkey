@@ -578,7 +578,7 @@ class Music(commands.Cog):
             await self.reset(handler, leave=True)
             return
 
-        print(track.title)
+        print(track.title, 'session_id:', player.current_node._session_id)
 
         # Converte música para YouTubeTrack
         # Isso já é feito automaticamente em player.play(), porém acaba demorando alguns segundos para retornar
@@ -598,20 +598,23 @@ class Music(commands.Cog):
             try:
                 nodes: dict[str, wavelink.Node] = wavelink.NodePool.nodes
                 node = nodes['main']
-                await node._websocket.cleanup()
 
-                # del node
+                await node._websocket.cleanup()
                 del nodes['main']
-                # node = wavelink.NodePool.get_node('main')
 
                 print('successfully cleanup')
                 await self.connect_nodes()
 
-                # await player.connect(timeout=10, reconnect=True)
+                await player.connect(timeout=10, reconnect=True)
                 await player.play(track)
-
             except Exception as e:
-                print('Error during reconnect', e.__class__, e)
+                try:
+                    print('Error during reconnect', e.__class__, e)
+
+                    player.current_node = wavelink.NodePool.get_connected_node()
+                    await player.play(track)
+                except Exception as e:
+                    print('Error during changing connected_node', e.__class__, e)
 
         # Atualiza views
         await handler.display_view.refresh(track)
