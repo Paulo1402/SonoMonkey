@@ -828,8 +828,7 @@ class Music(commands.Cog):
         # Atualiza view
         await handler.queue_view.refresh()
 
-    @staticmethod
-    async def reset(handler: GuildHandler, leave: bool):
+    async def reset(self, handler: GuildHandler, leave: bool):
         """
         Reseta o bot e variáveis.
 
@@ -849,7 +848,10 @@ class Music(commands.Cog):
         # através da flag handler.reset
         try:
             handler.reset = True
-            await player.stop()
+
+            if player.is_playing():
+                task = asyncio.ensure_future(player.stop())
+                await asyncio.wait([task])
         except wavelink.InvalidLavalinkResponse:
             pass
 
