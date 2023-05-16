@@ -595,7 +595,7 @@ class Music(commands.Cog):
 
             try:
                 # Retorna dicionário de nodes
-                nodes: dict[str, wavelink.Node] = wavelink.NodePool.nodes
+                nodes = wavelink.NodePool.nodes
 
                 # Para websocket do node principal
                 await nodes['main'].websocket.cleanup()
@@ -610,6 +610,7 @@ class Music(commands.Cog):
                 channel = player.channel
 
                 await player.disconnect()
+                await asyncio.sleep(1)
                 player = await channel.connect(cls=Player())
 
                 await player.play(track)
