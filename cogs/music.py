@@ -561,6 +561,7 @@ class Music(commands.Cog):
         if not player.is_playing() and not player.is_paused():
             await self.play_song(handler)
 
+    # noinspection PyTypeChecker
     async def play_song(self, handler: GuildHandler):
         """
         Reproduz música e carrega views.
@@ -578,51 +579,42 @@ class Music(commands.Cog):
             await self.reset(handler, leave=True)
             return
 
-        print(track.title, 'session_id:', player.current_node._session_id)
+        print(handler.guild.name, ' - ', track.title, ' - ', 'session_id:', player.current_node.session_id)
 
         # Converte música para YouTubeTrack
         # Isso já é feito automaticamente em player.play(), porém acaba demorando alguns segundos para retornar
         # E as views ficam aguardando o retorno para serem atualizadas.
         if isinstance(track, spotify.SpotifyTrack):
-            # noinspection PyTypeChecker
             track = await track.fulfill(player=player, cls=wavelink.YouTubeTrack, populate=False)
 
-        # todo BUGS
-        #  As vezes há algum problema na conexão com o lavalink e é levantada a exception InvalidLavaLinkResponse
-        #  Ainda não descobri como contornar, talvez reconectar os nodes?? TENTAR RECONECTAR NODES
-
+        # Às vezes a conexão com o lavalink dá algum problema e precisa ser reiniciada "on the fly".
         try:
             await player.play(track)
-        except wavelink.InvalidLavalinkResponse as e:
-            print('Error during connection to lavalink server, restarting node. Error: ', e)
+        except wavelink.InvalidLavalinkResponse:
+            print('Error during connection to lavalink server, restarting node...')
 
             try:
+                # Retorna dicionário de nodes
                 nodes: dict[str, wavelink.Node] = wavelink.NodePool.nodes
-                node = nodes['main']
 
-                await node._websocket.cleanup()
+                # Para websocket do node principal
+                await nodes['main'].websocket.cleanup()
+
+                # Deleta node da NodePool
                 del nodes['main']
-                print('successfully cleanup')
 
+                # Reconecta nodes
                 await self.connect_nodes()
-                node = wavelink.NodePool.get_connected_node()
-                print(node.id, 'session_id:', node._session_id)
 
-                player.current_node = node
+                # Reconecta canal e tenta reproduzir track
+                channel = player.channel
 
                 await player.disconnect()
-                await player.connect(timeout=5, reconnect=True)
-
-                await asyncio.sleep(2)
-
-                # channel = player.channel
-                #
-                # await player.disconnect()
-                # player = await channel.connect(cls=Player())
+                player = await channel.connect(cls=Player())
 
                 await player.play(track)
             except Exception as e:
-                print('Error during changing connected_node', e.__class__, e)
+                print('Error during reconnecting', e.__class__, e)
 
         # Atualiza views
         await handler.display_view.refresh(track)
