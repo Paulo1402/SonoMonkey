@@ -849,9 +849,11 @@ class Music(commands.Cog):
         try:
             handler.reset = True
 
+            # Por alguma razão quando se para o bot e imediatamente o desconecta do canal a conexão com o lavalink
+            # é perdida, portanto, inseri um delay para tentar corrigir essa falha
             if player.is_playing():
-                task = asyncio.ensure_future(player.stop())
-                await asyncio.wait([task])
+                await player.stop()
+                await asyncio.sleep(1)
         except wavelink.InvalidLavalinkResponse:
             pass
 
