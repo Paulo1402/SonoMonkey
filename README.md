@@ -26,7 +26,7 @@ LAVALINK_HOST=https://NOME_DO_HOST:PORTA_DO_HOST
 LAVALINK_PASSWORD=SENHA_DO_LAVALINK
 ```
 
-Exemplo de lavalink host: https://lavalink:8080
+Exemplo de lavalink host: `https://lavalink:8080`
 
 A importação dessas variáveis é feita automaticamente dentro do código.
 
