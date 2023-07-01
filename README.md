@@ -22,9 +22,11 @@ Para usar o bot é necessário criar um arquivo de ambiente (.env) na raiz do pr
 TOKEN=TOKEN_DO_SEU_BOT  
 SPOTIFY_ID=ID_DA_SUA_API_DO_SPOTIFY  
 SPOTIFY_SECRET=SECRET_DA_SUA_API_DO_SPOTIFY  
-LAVALINK_HOST=NOME_DO_HOST_DO_LAVALINK  
+LAVALINK_HOST=https://NOME_DO_HOST:PORTA_DO_HOST
 LAVALINK_PASSWORD=SENHA_DO_LAVALINK
 ```
+
+Exemplo de lavalink host: https://lavalink:8080
 
 A importação dessas variáveis é feita automaticamente dentro do código.
 

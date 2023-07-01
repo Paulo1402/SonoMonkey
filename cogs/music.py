@@ -20,6 +20,7 @@ import json
 import random
 import logging
 import asyncio
+import re
 from datetime import datetime, date
 from math import floor
 
@@ -384,10 +385,9 @@ class Music(commands.Cog):
         # Obtém dados sensíveis armazenados como variáveis de ambiente
         client_id = os.getenv('SPOTIFY_ID')
         client_secret = os.getenv('SPOTIFY_SECRET')
-        host = os.getenv('LAVALINK_HOST')
+        uri = os.getenv('LAVALINK_HOST')
         password = os.getenv('LAVALINK_PASSWORD')
 
-        uri = f'{host}:443'
         spotify_client = None
 
         # Cria objeto spotify_client
@@ -395,8 +395,12 @@ class Music(commands.Cog):
             spotify_client = spotify.SpotifyClient(client_id=client_id, client_secret=client_secret)
             self.spotify_support = True
 
+        # Verifica se a conexão é segura ou não (HTTPS/HTTP)
+        secure = True if uri.startswith('https://') else False
+        uri_parsed = re.sub(r'https?://', '', uri)
+
         # Cria node
-        node = wavelink.Node(id='main', uri=uri, password=password, secure=True)
+        node = wavelink.Node(id='main', uri=uri_parsed, password=password, secure=secure)
         await wavelink.NodePool.connect(client=self.bot, nodes=[node], spotify=spotify_client)
         
     def cog_check(self, ctx: commands.Context) -> bool:
@@ -828,7 +832,8 @@ class Music(commands.Cog):
         # Atualiza view
         await handler.queue_view.refresh()
 
-    async def reset(self, handler: GuildHandler, leave: bool):
+    @staticmethod
+    async def reset(handler: GuildHandler, leave: bool):
         """
         Reseta o bot e variáveis.
 
