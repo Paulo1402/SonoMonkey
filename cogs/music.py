@@ -544,9 +544,11 @@ class Music(commands.Cog):
             )
         else:
             if spotify_decode:
-                track = await spotify.SpotifyTrack.search(query=search, return_first=True)
+                track = await spotify.SpotifyTrack.search(search)
             else:
-                track = await wavelink.YouTubeTrack.search(search, return_first=True)
+                track = await wavelink.YouTubeTrack.search(search)
+
+            track = track[0]
 
             # Cria um atributo para referenciar o solicitante do comando, usado para logar no arquivo de log mais tarde
             setattr(track, 'requester', requester)
@@ -583,7 +585,8 @@ class Music(commands.Cog):
             await self.reset(handler, leave=True)
             return
 
-        print(handler.guild.name, ' - ', track.title, ' - ', 'session_id:', player.current_node.session_id)
+        # print(handler.guild.name, ' - ', track.title, ' - ', 'session_id:', player.current_node.session_id)
+        print(handler.guild.name, ' - ', track.title)
 
         # Converte música para YouTubeTrack
         # Isso já é feito automaticamente em player.play(), porém acaba demorando alguns segundos para retornar
@@ -593,7 +596,7 @@ class Music(commands.Cog):
 
         # Às vezes a conexão com o lavalink dá algum problema e precisa ser reiniciada "on the fly".
         try:
-            await player.play(track)
+            await player.play(track, replace=True)
         except wavelink.InvalidLavalinkResponse:
             print('Error during connection to lavalink server, restarting node...')
 
@@ -819,12 +822,12 @@ class Music(commands.Cog):
         count = 0
 
         if spotify_decode:
-            tracks = await spotify.SpotifyTrack.search(query=search, type=spotify_decode['type'])
+            tracks = await spotify.SpotifyTrack.search(query=search)
 
             for track in tracks:
                 await add_track(track)
         else:
-            tracks = await wavelink.YouTubePlaylist.search(search)
+            tracks: wavelink.YouTubePlaylist = await wavelink.YouTubePlaylist.search(search)
 
             for track in tracks.tracks:
                 await add_track(track)
